@@ -28,15 +28,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      # 只校验 dist 非空且至少含两个入口，不枚举具体文件：新增产物时无需改这里。
       - name: Verify build output
         run: |
           set -euo pipefail
-          for file in dist/index.js dist/client.js dist/cordis.patch.yml dist/icon.svg \
-                      dist/locale/en.json dist/locale/zh.json; do
-            test -s "$file" || { echo "missing build output: $file"; exit 1; }
+          test -d dist || { echo "dist/ was not produced"; exit 1; }
+          count=$(find dist -type f | wc -l)
+          test "$count" -gt 0 || { echo "dist/ is empty"; exit 1; }
+          find dist -type f -empty -print -quit | grep -q . && { echo "dist/ contains empty files"; exit 1; }
+          for entry in dist/index.js dist/client.js; do
+            test -s "$entry" || { echo "missing entry point: $entry"; exit 1; }
           done
+          echo "dist/ contains $count file(s):"
+          find dist -type f | sort
 
-      # 打包成便携压缩包，供不想走 npm 的用户直接下载。
+      # 打包 dist 全部内容，外加仓库根的说明与许可证。
       - name: Package tarball
         run: mkdir -p artifacts && tar -czf artifacts/dsh-tmp-wks.tar.gz dist README.md README.zh.md LICENSE
 
@@ -78,6 +84,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 取完整历史，供下面的变更清单按上一个 tag 生成。
+          fetch-depth: 0
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -85,10 +94,46 @@ jobs:
           name: packages
           path: artifacts
 
+      # 用固定模板拼出 Release 说明，不改用 generate_release_notes：
+      # 原生自动生成只统计 PR，本仓库直接推送 main，模板更可控且直接给出安装命令。
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo '')
+
+          {
+            echo "从 DSH 侧边栏一键创建临时工作区并直接开始会话，删除时可选是否清理磁盘上的临时目录。"
+            echo
+            echo "## 安装"
+            echo
+            echo '```sh'
+            echo "dsh plugin --profile web add @cliven/dsh-tmp-wks@${version}"
+            echo '```'
+            echo
+            echo "## 变更"
+            echo
+            if [ -n "$prev" ]; then
+              echo "自 \`${prev}\` 以来的提交："
+              echo
+              git log --no-merges --pretty='- %s (%h)' "${prev}..${GITHUB_REF_NAME}"
+            else
+              echo "首个版本。"
+            fi
+            echo
+            echo "## 下载"
+            echo
+            echo "- \`dsh-tmp-wks.tar.gz\`：含 \`dist/\`、双语文档与 LICENSE，解压即用（不想走 npm 时可下载）。"
+            echo "- npm：[\`@cliven/dsh-tmp-wks@${version}\`](https://www.npmjs.com/package/@cliven/dsh-tmp-wks/v/${version})"
+          } > RELEASE_NOTES.md
+
+          echo "--- 生成的说明 ---"
+          cat RELEASE_NOTES.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/dsh-tmp-wks.tar.gz
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
