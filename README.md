@@ -1,4 +1,4 @@
-# dsh-tmp-wks：DeepSeek Harness 快捷临时会话
+# DeepSeek Harness 快捷临时会话
 
 [![DSH](https://img.shields.io/badge/Agent-DeepSeek%20Harness-4176e6)](https://www.deepseek.com/en/harness/)
 [![npm](https://img.shields.io/npm/v/@cliven/dsh-tmp-wks?color=red)](https://www.npmjs.com/package/@cliven/dsh-tmp-wks)
