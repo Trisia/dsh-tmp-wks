@@ -1,0 +1,4 @@
+# 向当前 profile 插入一行插件。
+- insert:
+    - id: local-dsh-tmp-wks
+      name: 'dsh-tmp-wks'
