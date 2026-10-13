@@ -5,29 +5,31 @@ import React from 'react'
 /** 次要说明文字样式。 */
 export const MUTED: React.CSSProperties = { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' }
 
-/** 弹层遮罩。 */
+/** 弹层遮罩：半透明遮罩色 + 主题模糊，下层界面保持可见。 */
 const MASK: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  // `shell.overlay` 本身是点击穿透层，必须显式打开，否则会拦住整个应用的点击。
+  padding: 'max(24px, var(--dsh-frame-overlay-top, 24px)) 24px',
+  // `shell.overlay` 本身是点击穿透层，必须显式打开才拦得住点击。
   pointerEvents: 'auto',
-  background: 'var(--dsw-alias-bg-overlay)',
+  background: 'var(--dsw-alias-bg-mask-1)',
+  backdropFilter: 'var(--dsw-mask-blur)',
 }
 
+/** 弹层卡片：宽度随遮罩收缩。 */
 const CARD: React.CSSProperties = {
-  minWidth: 360,
-  maxWidth: '90vw',
-  maxHeight: '80vh',
+  width: 'min(380px, 100%)',
+  maxWidth: '100%',
+  maxHeight: '100%',
   overflow: 'auto',
-  padding: 16,
-  borderRadius: 12,
-  background: 'var(--dsw-alias-bg-layer-1)',
-  border: '1px solid var(--dsw-alias-border-l2)',
+  padding: 20,
+  borderRadius: 'var(--dsw-radius-lg)',
+  background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-primary)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.24)',
+  boxShadow: 'var(--dsw-elevation-prominent)',
 }
 
 /** 同层多个弹层若共用 z-index，内层无法盖住外层，故按打开顺序递增。 */
@@ -130,39 +132,5 @@ export function Btn({ variant = 'outline', disabled = false, onClick, children }
     >
       {children}
     </button>
-  )
-}
-
-/**
- * 带说明文字的复选框。
- * @param props.checked - 当前是否勾选。
- * @param props.disabled - 禁用时不可切换。
- * @param props.label - 说明文字。
- * @param props.onChange - 勾选状态变化回调。
- */
-export function Check({ checked, disabled = false, label, onChange }: {
-  checked: boolean
-  disabled?: boolean
-  label: string
-  onChange: (next: boolean) => void
-}) {
-  return (
-    <label style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      fontSize: 13,
-      cursor: disabled ? 'default' : 'pointer',
-      opacity: disabled ? 0.6 : 1,
-    }}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        style={{ accentColor: 'var(--dsw-alias-brand-primary)', cursor: 'inherit' }}
-      />
-      <span>{label}</span>
-    </label>
   )
 }

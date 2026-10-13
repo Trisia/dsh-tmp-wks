@@ -1,5 +1,5 @@
 {
-  "name": "dsh-tmp-wks",
+  "name": "@cliven/dsh-tmp-wks",
   "version": "1.0.0",
   "type": "module",
   "description": "Sidebar \"New temp session\": create a throwaway workspace and start a session in it",

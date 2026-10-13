@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import { Btn, Check, Modal, MUTED } from './ui.js'
+import { Btn, Modal, MUTED } from './ui.js'
 import { DICTS, NS, fill, type Translate } from './i18n.js'
 import { createTempWorkspace, deleteTempDirectory, readOwned, writeOwned, type TempWksRemote } from './remote.js'
 import { TempIcon, buttonStyle } from './sidebar-button.js'
@@ -34,10 +34,8 @@ function DeleteDialog({ workspaceId, title, path, t, onClose, onDone }: {
   path: string
   t: Translate
   onClose: () => void
-  onDone: (req: { workspaceId: string; path: string; removeDir: boolean }) => Promise<{ failed?: string }>
+  onDone: (req: { workspaceId: string; path: string }) => Promise<{ failed?: string }>
 }) {
-  // 默认不勾选：内置删除语义是「只移除登记、保留目录」，默认勾选会让人在不知情下丢数据。
-  const [removeDir, setRemoveDir] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const close = () => { if (!busy) onClose() }
@@ -45,7 +43,7 @@ function DeleteDialog({ workspaceId, title, path, t, onClose, onDone }: {
   const confirm = () => {
     setBusy(true)
     setError(null)
-    onDone({ workspaceId, path, removeDir }).then(
+    onDone({ workspaceId, path }).then(
       (outcome) => {
         setBusy(false)
         if (outcome?.failed === undefined) onClose()
@@ -69,8 +67,7 @@ function DeleteDialog({ workspaceId, title, path, t, onClose, onDone }: {
       </>}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Check checked={removeDir} onChange={setRemoveDir} disabled={busy} label={t('delete.removeDir')} />
-        {removeDir ? <div style={{ ...MUTED, wordBreak: 'break-all' }}>{fill(t('delete.dirHint'), { path })}</div> : null}
+        <div style={{ ...MUTED, wordBreak: 'break-all' }}>{fill(t('delete.dirHint'), { path })}</div>
         {busy ? <div role="status" style={MUTED}>{t('delete.pending')}</div> : null}
         {error === null ? null : <div role="alert" style={{ ...MUTED, color: 'var(--dsw-alias-state-error-primary)' }}>{error}</div>}
       </div>
@@ -93,8 +90,8 @@ function ManagePanel({ t, onClose, deps }: { t: Translate; onClose: () => void; 
     (item) => owned.some((record) => String(record.id) === String(item.workspaceId)),
   )
 
-  /** 先移除登记，再按勾选决定是否删目录。 */
-  const runDelete = async ({ workspaceId, path, removeDir }: { workspaceId: string; path: string; removeDir: boolean }) => {
+  /** 先移除登记，再删磁盘目录。 */
+  const runDelete = async ({ workspaceId, path }: { workspaceId: string; path: string }) => {
     // 标记为面板所删，避免事后补救提示把同一次删除再报一遍。
     selfDeleted.add(String(workspaceId))
     try {
@@ -105,7 +102,6 @@ function ManagePanel({ t, onClose, deps }: { t: Translate; onClose: () => void; 
     } catch (reason) {
       return { failed: String((reason as Error)?.message ?? reason) }
     }
-    if (!removeDir) return {}
     const code = await deleteTempDirectory(deps.getRemote(), path)
     return code === 'deleted' || code === 'missing'
       ? {}
@@ -159,25 +155,32 @@ function ManagePanel({ t, onClose, deps }: { t: Translate; onClose: () => void; 
  * 事后补救提示：内置删除按钮移除了登记，但临时目录可能仍在磁盘上。
  *
  * 内置的工作区删除按钮不是 slot，既无法拦截、也无法往它的确认框加控件，
- * 只能在删除发生后对比登记与列表来发现。
+ * 只能在删除发生后对比登记与列表来发现。只有本次运行期间出现过、随后从列表
+ * 消失的条目才算删除；启动时列表可能尚未加载完，此时的缺失不作数。
  */
 function CleanupPrompt({ deps, t }: { deps: ManageDeps; t: Translate }) {
   const [pending, setPending] = React.useState<string | null>(null)
 
   React.useEffect(() => {
+    // 本次运行中在列表里出现过的 id。
+    const seen = new Set<string>()
+
     const check = () => {
       const live = new Set(deps.workspaces.list.getSnapshot().items.map((item) => String(item.workspaceId)))
       const records = readOwned()
+      // 出现过、如今消失，且不是本面板自己删的，才算外部删除。
+      const removed = [...seen].find((id) => !live.has(id) && !selfDeleted.has(id))
       const liveRecords = records.filter((record) => live.has(String(record.id)))
-      const missing = records.find(
-        (record) => !live.has(String(record.id))
-          && typeof record.path === 'string'
-          && !selfDeleted.has(String(record.id)),
-      )
+
+      for (const id of live) seen.add(id)
+      if (removed !== undefined) seen.delete(removed)
       // 先注销登记以免反复提示；目录是否清理交给用户决定。
       if (liveRecords.length !== records.length) writeOwned(liveRecords)
-      if (missing !== undefined) setPending(missing.path ?? null)
+      if (removed !== undefined) {
+        setPending(records.find((record) => String(record.id) === removed)?.path ?? null)
+      }
     }
+
     check()
     return deps.workspaces.list.subscribe(check)
   }, [deps])

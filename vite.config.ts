@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const root = dirname(fileURLToPath(import.meta.url))
-const PKG = 'dsh-tmp-wks'
+const PKG = '@cliven/dsh-tmp-wks'
 
 /** Node 内置模块（含 `node:` 前缀）一律 external。 */
 const NODE_EXTERNAL = [...builtinModules, ...builtinModules.map((n) => `node:${n}`)]

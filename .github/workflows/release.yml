@@ -1,0 +1,94 @@
+name: Release
+
+# 打 v* tag 时触发：构建 -> 发布 npm -> 创建 GitHub Release。
+on:
+  push:
+    tags: [ 'v*' ]
+
+# contents: write 用于创建 GitHub Release。
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 插件以 dist/ 作为发布单元，构建后再打包，确保产物与源码一致。
+      - name: Build
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          set -euo pipefail
+          for file in dist/index.js dist/client.js dist/cordis.patch.yml dist/icon.svg \
+                      dist/locale/en.json dist/locale/zh.json; do
+            test -s "$file" || { echo "missing build output: $file"; exit 1; }
+          done
+
+      # 打包成便携压缩包，供不想走 npm 的用户直接下载。
+      - name: Package tarball
+        run: mkdir -p artifacts && tar -czf artifacts/dsh-tmp-wks.tar.gz dist README.md README.zh.md LICENSE
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/*.tar.gz
+
+  npm-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # 需要在仓库中配置 environment: RELEASE_CI 并写入 NPM_TOKEN。
+    environment: RELEASE_CI
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # package.json 的 files 只含 dist，prepublishOnly 未配置，故此处不重复构建。
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/dsh-tmp-wks.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,0 @@
-{
-  "meta": {
-    "title": "Temp Workspace",
-    "description": "Creates a temporary workspace under tmp in the DSH home and starts a new session in it."
-  }
-}
