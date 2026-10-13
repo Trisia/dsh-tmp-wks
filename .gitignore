@@ -2,3 +2,6 @@ node_modules/
 *.log
 .DS_Store
 dist/
+# CI 在 runner 内生成的 Release 说明，仅用于发布，不入库。
+RELEASE_NOTES.md
+artifacts/
