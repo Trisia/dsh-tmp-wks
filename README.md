@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/Trisia/dsh-tmp-wks/actions/workflows/release.yml/badge.svg)](https://github.com/Trisia/dsh-tmp-wks/actions/workflows/release.yml)
 
-**dsh**-tmp-wks = **D**eep**S**eek **H**arness **tmp**orary **w**or**k**space**s**
+**D**eep**S**eek **H**arness **T**emporary **W**ork**s**paces (dsh-tmp-wks)
 
 ![demo](docs/demo.en.gif)
 
