@@ -29,6 +29,10 @@
 dsh plugin --profile web add @cliven/dsh-tmp-wks
 ```
 
+## 存储位置
+
+临时工作区位于 **DSH 主目录下的 `tmp/`**，命名为 `tmp-` 加 6 位随机字符。主目录默认为 `~/.dsh`（可用 `$DSH_HOME` 覆盖），因此默认路径形如 `~/.dsh/tmp/tmp-k7mq2z`。
+
 ## 许可证
 
 [MIT](LICENSE)

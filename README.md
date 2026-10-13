@@ -29,6 +29,10 @@ Creates a throwaway workspace with one click and starts a session in it:
 dsh plugin --profile web add @cliven/dsh-tmp-wks
 ```
 
+## Storage location
+
+Temp workspaces live in **`tmp/` under the DSH home directory**, named `tmp-` plus 6 random characters. The home defaults to `~/.dsh` (override with `$DSH_HOME`), so a default path looks like `~/.dsh/tmp/tmp-k7mq2z`.
+
 ## License
 
 [MIT](LICENSE)
