@@ -96,14 +96,22 @@ jobs:
 
       # 用固定模板拼出 Release 说明，不改用 generate_release_notes：
       # 原生自动生成只统计 PR，本仓库直接推送 main，模板更可控且直接给出安装命令。
+      #
+      # 若 tag 是附注 tag（git tag -a），其说明作为「版本说明」插入；轻量 tag 则回落到默认简介。
       - name: Compose release notes
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo '')
+          # tag 说明：%b 为正文。轻量 tag 无说明，展开为空串。
+          tag_msg=$(git tag -l --format='%(contents:body)' "${GITHUB_REF_NAME}" | sed -e 's/[[:space:]]*$//')
+          # 未配置说明时用一句话简介兜底，避免说明段空缺。
+          if [ -z "$tag_msg" ]; then
+            tag_msg="从 DSH 侧边栏一键创建临时工作区并直接开始会话，删除时可选是否清理磁盘上的临时目录。"
+          fi
 
           {
-            echo "从 DSH 侧边栏一键创建临时工作区并直接开始会话，删除时可选是否清理磁盘上的临时目录。"
+            echo "$tag_msg"
             echo
             echo "## 安装"
             echo
