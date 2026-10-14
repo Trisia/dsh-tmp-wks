@@ -1,13 +1,19 @@
 /**
- * Host Remote 调用封装，以及本地「本插件创建过哪些工作区」的登记。
+ * Host Remote 调用封装。
  *
- * 登记同时保存 id 与路径：工作区行消失后无法再反查其目录路径。
+ * 临时工作区的登记由 Host 持有（storage 领域），Client 不自存、不轮询任何状态：
+ * 是否弹删除确认由 Host 的结果码决定，界面只负责呈现。
  */
 
 /** `ctx.remote.tmpWks` 的服务面。 */
 export interface TempWksRemote {
   create(): Promise<{ ok: boolean; value?: CreatedWorkspace; error?: RemoteFailure }>
-  deleteDirectory(request: { path: string }): Promise<{ ok: boolean; value?: { code: string }; error?: RemoteFailure }>
+  list(): Promise<{ ok: boolean; value?: string[]; error?: RemoteFailure }>
+  getState(): Promise<{ ok: boolean; value?: TmpWksState; error?: RemoteFailure }>
+  deleteDirectory(request: {
+    path: string
+    confirmed?: boolean
+  }): Promise<{ ok: boolean; value?: { code: string }; error?: RemoteFailure }>
 }
 
 /** Host 返回的新建工作区信息。 */
@@ -15,6 +21,13 @@ export interface CreatedWorkspace {
   workspaceId: string
   path: string
   title: string
+}
+
+/** Host 侧的运行期配置快照。 */
+export interface TmpWksState {
+  tempDir: string
+  dirPrefix: string
+  confirmDirDelete: boolean
 }
 
 /** Host 侧的失败描述。 */
@@ -27,9 +40,6 @@ export interface RemoteFailure {
 interface CodedError extends Error {
   code?: string
 }
-
-/** 本地登记项的存储键。 */
-const OWNED_KEY = 'dsh-tmp-wks.owned'
 
 /**
  * 构造带稳定 `code` 的错误。
@@ -57,33 +67,9 @@ function unwrap<T>(result: { ok: boolean; value?: T; error?: RemoteFailure } | u
 }
 
 /**
- * 读取本地登记。
- * @returns 登记项数组；存储不可用或内容损坏时按空登记处理。
- */
-export function readOwned(): Array<{ id: string; path?: string }> {
-  try {
-    const list = JSON.parse(globalThis.localStorage?.getItem(OWNED_KEY) ?? '[]')
-    return Array.isArray(list) ? list.filter((record) => typeof record?.id === 'string') : []
-  } catch {
-    // 隐私模式等场景下 localStorage 可能抛错。
-    return []
-  }
-}
-
-/**
- * 覆盖写入本地登记。
- * @param records - 完整的新登记内容。
- */
-export function writeOwned(records: Array<{ id: string; path?: string }>): void {
-  try {
-    globalThis.localStorage?.setItem(OWNED_KEY, JSON.stringify(records))
-  } catch {
-    // 写失败只影响下次启动的入口显示，不阻断当前操作。
-  }
-}
-
-/**
- * 请求 Host 创建临时工作区，并把结果登记到本地。
+ * 请求 Host 创建临时工作区。
+ *
+ * 登记由 Host 完成，Client 无需再记任何东西。
  * @param remote - Remote 服务面；未挂载时为 undefined。
  * @returns 新建的工作区信息。
  */
@@ -93,18 +79,56 @@ export async function createTempWorkspace(remote: TempWksRemote | undefined): Pr
   if (typeof created?.workspaceId !== 'string' || typeof created?.path !== 'string') {
     throw codedError('badResponse')
   }
-  writeOwned([...readOwned(), { id: created.workspaceId, path: created.path }])
   return created
 }
 
 /**
+ * 读取本插件创建过、且仍存在于磁盘上的临时目录路径。
+ * @param remote - Remote 服务面；未挂载时为 undefined。
+ * @returns 路径数组；无法读取时返回空数组，调用方按「无」处理。
+ */
+export async function listTempDirs(remote: TempWksRemote | undefined): Promise<string[]> {
+  if (remote === undefined) return []
+  try {
+    const rows = unwrap(await remote.list())
+    return Array.isArray(rows) ? rows.filter((row): row is string => typeof row === 'string') : []
+  } catch {
+    // 读取失败不该让界面崩掉：空列表比抛错更贴近可用预期。
+    return []
+  }
+}
+
+/**
+ * 读取 Host 侧的配置快照。
+ * @param remote - Remote 服务面；未挂载时为 undefined。
+ * @returns 配置快照；无法读取时为 undefined。
+ */
+export async function readState(remote: TempWksRemote | undefined): Promise<TmpWksState | undefined> {
+  if (remote === undefined) return undefined
+  try {
+    return unwrap(await remote.getState())
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * 请求 Host 删除临时目录。
+ *
+ * Host 依据 `confirmDirDelete` 决定是否先回 `needs-confirm`：需要确认时它不会
+ * 触碰磁盘，界面据此弹提示，确认后再带 `confirmed` 调一次。
  * @param remote - Remote 服务面；未挂载时为 undefined。
  * @param path - 待删除目录的绝对路径。
+ * @param confirmed - 用户是否已确认连目录一起删。
  * @returns 结果码；无法调用时返回 `request-failed`。
  */
-export async function deleteTempDirectory(remote: TempWksRemote | undefined, path: string): Promise<string> {
+export async function deleteTempDirectory(
+  remote: TempWksRemote | undefined,
+  path: string,
+  confirmed = false,
+): Promise<string> {
   if (remote === undefined) return 'request-failed'
-  const value = unwrap(await remote.deleteDirectory({ path }))
+  const request = confirmed ? { path, confirmed: true } : { path }
+  const value = unwrap(await remote.deleteDirectory(request))
   return typeof value?.code === 'string' ? value.code : 'request-failed'
 }

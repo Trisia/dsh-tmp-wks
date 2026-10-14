@@ -19,7 +19,7 @@ You just want to ask a quick question, but you have to leave DSH, create a folde
 Temp workspaces collapse all of that into a single click:
 
 - **One-click setup**: click once and a throwaway workspace is created on the spot, with a session already started in it.
-- **Deletion under control**: deleting a workspace asks whether to delete its temp directory on disk too, and keeps the files by default.
+- **Deletion under control**: deleting asks whether to delete the temp directory on disk too, and keeps the files by default. That prompt can be turned off.
 - **Works on both clients**: available in DSH Web and the DSH desktop client, from a single install.
 
 ## Install
@@ -28,17 +28,15 @@ Temp workspaces collapse all of that into a single click:
 dsh plugin --profile web add @cliven/dsh-tmp-wks
 ```
 
-A "New temp session" button then appears at the bottom of the sidebar; click it to create a temp workspace and start a session. Right-click the button to open the management panel, where you can view and delete the temp workspaces this plugin created.
+A "New temp session" button then appears at the bottom of the sidebar; click it to create a temp workspace and start a session. Right-click the button to open the management panel, which handles the temp directories on disk.
 
-## Storage location
-
-Temp workspaces live in **`tmp/` under the DSH home directory**, each named `tmp-` plus 6 random characters.
-
-The home directory defaults to `~/.dsh` and can be overridden with the `$DSH_HOME` environment variable, so a default path looks like:
+Temp workspaces are created under `~/.dsh/tmp/` by default, for example:
 
 ```
 ~/.dsh/tmp/tmp-k7mq2z
 ```
+
+Storage location, name prefix, and the delete confirmation are configurable on the **Plugins** page in the sidebar. The plugin only deletes directories it created.
 
 ## License
 
