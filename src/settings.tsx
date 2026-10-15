@@ -11,10 +11,17 @@
 import React from 'react'
 import { Btn, MUTED } from './ui.js'
 import { NS, fill, type Translate } from './i18n.js'
+import { readState, type TempWksRemote } from './remote.js'
 
-/** 默认值，与 Host 侧 `config.ts` 保持一致，用于「恢复默认」。 */
+/**
+ * 默认值，与 Host 侧 `config.ts` 保持一致，用于「恢复默认」。
+ *
+ * `tempDir` 的空串表示「未配置」：写入时按 `unset` 处理，撤销覆盖让 Host 重新
+ * 取操作系统的临时目录。具体路径依赖运行环境，客户端无法自行推断，需要从
+ * Host 的 `getState()` 读取，见 `hostTempDir`。
+ */
 const DEFAULTS = {
-  tempDir: 'tmp',
+  tempDir: '',
   dirPrefix: 'tmp-',
   confirmDirDelete: true,
 }
@@ -45,6 +52,8 @@ interface SettingsProps {
     state: FormSnapshot
     mutate(ops: readonly PathOp[], revision?: number): Promise<boolean>
   }
+  /** 读取 Host 服务面，用于取已物化的完整路径。 */
+  getRemote: () => TempWksRemote | undefined
   /** 渲染机制按 `locale` 命名空间合成的当前语言文案函数。 */
   t: Translate
 }
@@ -114,7 +123,7 @@ const INPUT: React.CSSProperties = {
  * 编辑只改本地草稿，点「保存」才整批写入：一次提交携带读到的修订号，
  * 并发改动因此不会被静默覆盖。
  */
-export function SettingsPage({ view, form, t }: SettingsProps) {
+export function SettingsPage({ view, form, getRemote, t }: SettingsProps) {
   const value = form?.state.value
   const status = form?.state.status ?? 'unavailable'
 
@@ -128,6 +137,24 @@ export function SettingsPage({ view, form, t }: SettingsProps) {
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [saved, setSaved] = React.useState(false)
+  /**
+   * Host 已物化的完整路径，即「恢复默认」应当回填的值。
+   *
+   * 表单里的 `tempDir` 来自配置层，未配置时是空串；而默认值（操作系统临时目录）
+   * 只有 Host 知道，因此这里向 Host 取一次。取不到时保持 undefined，此时「恢复
+   * 默认」退回为清空输入框——语义不变（仍是撤销覆盖），只是不显示具体路径。
+   */
+  const [hostTempDir, setHostTempDir] = React.useState<string | undefined>(undefined)
+
+  React.useEffect(() => {
+    let live = true
+    void readState(getRemote()).then((state) => {
+      if (live && typeof state?.tempDir === 'string' && state.tempDir.trim() !== '') {
+        setHostTempDir(state.tempDir)
+      }
+    })
+    return () => { live = false }
+  }, [getRemote])
 
   // Host 值变化时重置草稿，保证页面显示的就是已接受值。
   React.useEffect(
@@ -139,11 +166,31 @@ export function SettingsPage({ view, form, t }: SettingsProps) {
     return <div style={{ ...MUTED, fontSize: 13 }}>{t('settings.unavailable')}</div>
   }
 
+  /**
+   * 配置未覆盖时实际生效的目录：能取到 Host 物化的路径就用它，否则退回一句说明
+   * （此时 `{value}` 留空，避免把占位符原样显示出来）。
+   */
+  const effectiveTempDir = hostTempDir ?? fill(t('settings.tempDir.osDefault'), { value: '' })
+
   if (view === 'summary') {
-    return <div style={{ ...MUTED, fontSize: 12 }}>{fill(t('settings.current'), { value: accepted.tempDir })}</div>
+    // 未配置时不能显示空值：那一行的含义是「系统临时目录」，而非「没有位置」。
+    const shown = accepted.tempDir.trim() === '' ? effectiveTempDir : accepted.tempDir
+    return <div style={{ ...MUTED, fontSize: 12 }}>{fill(t('settings.current'), { value: shown })}</div>
   }
 
-  const dirty = draft.tempDir !== accepted.tempDir
+  /**
+   * 把草稿里的目录取值折算成语义选择，用于判断「有没有真的改动」。
+   *
+   * 「留空」与「等于 Host 默认路径」是同一件事的两种写法（后者来自「恢复默认」），
+   * 都表示交回操作系统临时目录；把它们归一到同一个标记，才不会因为写法不同而
+   * 误判为已修改。把判定收在一处，`dirty` 与 `save` 也不会对同一份草稿给出不同结论。
+   * @param text - 草稿中的存放目录取值。
+   * @returns 表示「交回系统临时目录」时为 `''`，否则为用户填写的路径。
+   */
+  const effectiveTempDirChoice = (text: string): string =>
+    (text.trim() === '' || text === hostTempDir ? '' : text)
+
+  const dirty = effectiveTempDirChoice(draft.tempDir) !== effectiveTempDirChoice(accepted.tempDir)
     || draft.dirPrefix !== accepted.dirPrefix
     || draft.confirmDirDelete !== accepted.confirmDirDelete
   const invalid = !SEGMENT_PATTERN.test(draft.dirPrefix)
@@ -156,7 +203,14 @@ export function SettingsPage({ view, form, t }: SettingsProps) {
     setSaved(false)
     // 三项一起提交：单独提交会让「前缀已改、目录未改」的中间态被落盘。
     const ops: PathOp[] = []
-    if (draft.tempDir !== accepted.tempDir) ops.push({ op: 'set', path: ['tempDir'], value: draft.tempDir })
+    // 目录为空表示「交回操作系统临时目录」，语义上是撤销覆盖而非写入空串：
+    // 写入空串会在配置里留下一个显式空覆盖，让「未配置」与「配置为空」两种
+    // 状态混在一起。这里用 unset 清除该字段，让它重新继承默认行为。
+    if (effectiveTempDirChoice(draft.tempDir) !== effectiveTempDirChoice(accepted.tempDir)) {
+      ops.push(effectiveTempDirChoice(draft.tempDir) === ''
+        ? { op: 'unset', path: ['tempDir'] }
+        : { op: 'set', path: ['tempDir'], value: draft.tempDir })
+    }
     if (draft.dirPrefix !== accepted.dirPrefix) ops.push({ op: 'set', path: ['dirPrefix'], value: draft.dirPrefix })
     if (draft.confirmDirDelete !== accepted.confirmDirDelete) {
       ops.push({ op: 'set', path: ['confirmDirDelete'], value: draft.confirmDirDelete })
@@ -184,8 +238,12 @@ export function SettingsPage({ view, form, t }: SettingsProps) {
           style={INPUT}
           value={draft.tempDir}
           disabled={locked}
+          placeholder={t('settings.tempDir.placeholder')}
           onChange={(event) => setDraft({ ...draft, tempDir: event.target.value })}
         />
+        {draft.tempDir.trim() === ''
+          ? <span style={{ ...MUTED, fontSize: 11 }}>{fill(t('settings.tempDir.osDefault'), { value: effectiveTempDir })}</span>
+          : null}
         {isOverridden(form?.state.user, 'tempDir')
           ? <span style={{ ...MUTED, fontSize: 11 }}>{t('settings.overridden')}</span>
           : null}
@@ -220,8 +278,13 @@ export function SettingsPage({ view, form, t }: SettingsProps) {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         {saved ? <span style={{ ...MUTED, alignSelf: 'center' }}>{t('settings.saved')}</span> : null}
-        {/* 恢复默认就是清除覆盖，让字段重新继承组合层。 */}
-        <Btn variant="outline" disabled={locked} onClick={() => setDraft({ ...DEFAULTS })}>
+        {/* 恢复默认：目录一栏回填 Host 物化的完整路径而不是空串，用户能看到默认值
+            是什么；提交时仍按 unset 处理，见 `save`。取不到 Host 值时才留空。 */}
+        <Btn
+          variant="outline"
+          disabled={locked}
+          onClick={() => setDraft({ ...DEFAULTS, tempDir: hostTempDir ?? '' })}
+        >
           {t('settings.reset')}
         </Btn>
         <Btn variant="primary" disabled={locked || !dirty || invalid} onClick={save}>

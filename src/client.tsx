@@ -313,10 +313,12 @@ export function apply(ctx: any): void {
 
   // 可视配置页：挂在「插件」页本插件那一行上，键为 `<包名>#<行 id>`。
   // 页面所有者只传 view 与 form；`t` 由渲染机制按 locale 命名空间合成。
+  // `getRemote` 用于读取 Host 已物化的完整路径，供「恢复默认」回填。
   ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
     name: 'plugins.row.config',
     key: `${PKG}#${ROW_ID}`,
     locale: NS,
+    inject: () => ({ getRemote: remote }),
   }, SettingsPage))
 }
 

@@ -30,13 +30,13 @@ dsh plugin --profile web add @cliven/dsh-tmp-wks
 
 A "New temp session" button then appears at the bottom of the sidebar; click it to create a temp workspace and start a session. Right-click the button to open the management panel, which handles the temp directories on disk.
 
-Temp workspaces are created under `~/.dsh/tmp/` by default, for example:
+Temp workspaces are created under the operating system temp directory by default (`$TMPDIR` on Linux/macOS, `%TEMP%`/`%TMP%` on Windows), for example on Linux:
 
 ```
-~/.dsh/tmp/tmp-k7mq2z
+/tmp/tmp-k7mq2z
 ```
 
-Storage location, name prefix, and the delete confirmation are configurable on the **Plugins** page in the sidebar. The plugin only deletes directories it created.
+Storage location, name prefix, and the delete confirmation are configurable on the **Plugins** page in the sidebar. Leave the location empty to use the system temp directory, enter a relative path to resolve it against the DSH home, or an absolute path to use it as-is. The plugin only deletes directories it created.
 
 ## License
 
